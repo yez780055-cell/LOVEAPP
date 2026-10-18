@@ -65,5 +65,5 @@ jobs:
         with:
           api-level: 35
           arch: x86_64
-          profile: Pixel 2
+          profile: pixel_2
           script: ./gradlew --no-daemon connectedDebugAndroidTest
