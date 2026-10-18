@@ -104,7 +104,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@Composable private fun EventEditor(event: EventEntity?, vm: EventViewModel, onBack: () -> Unit, onSave: (String, String, String, String, Boolean, String, Boolean?) -> Unit) {
+@Composable private fun EventEditor(event: EventEntity?, vm: EventViewModel, onBack: () -> Unit, onSave: (String, String, String, String, Boolean, String, Boolean) -> Unit) {
     var title by remember(event?.id) { mutableStateOf(event?.title.orEmpty()) }
     var date by remember(event?.id) { mutableStateOf(event?.targetDate ?: LocalDate.now().toString()) }
     var note by remember(event?.id) { mutableStateOf(event?.note.orEmpty()) }
