@@ -1,29 +1,25 @@
-# Anniversary Native — Foundation + Days Matter V1
+# Life Space Native
 
-独立原生 Android 工程，仅实现纪念日模块基础版。未复用旧项目代码；当前不包含美柚和时光序业务。
+LOVEAPP is the Android native foundation for bringing Todo, Period, and Anniversary into one local-first app. This branch establishes the shared app shell and feature boundaries; Todo and Period remain migration skeletons, while the existing Anniversary flows continue to work.
 
-## 技术
+## Architecture
 
-Kotlin、Jetpack Compose、Navigation Compose、Room、Coroutines/Flow、ViewModel、DataStore 依赖预留、AlarmManager、BroadcastReceiver、RemoteViews AppWidget、Photo Picker/SAF 后续接入。
+- One Activity with Navigation Compose and three state-restoring bottom navigation destinations: 待办、小月历、纪念日.
+- Feature packages are separated under `app/src/main/java/dev/yezi/anniversary/feature/`; shared date, Room, notification, widget, backup, media, settings ports, and design tokens live under `core/`.
+- Anniversary data remains in the existing `anniversary.db`. Room migration 1→2 adds Todo and Period-owned tables and source identifiers to shared reminders; no destructive migration is configured.
+- Todo and Period currently show migration placeholders. Backup, media storage, and app-preference interfaces are contracts only; their product workflows are not implemented.
+- The application ID remains `dev.yezi.anniversary` to preserve Android upgrade identity.
 
-## 构建
+See `docs/ARCHITECTURE.md`, `docs/MIGRATION_PLAN.md`, and `docs/FEATURE_PARITY.md` for boundaries and remaining work.
 
-需要 JDK 17、Gradle（AGP 8.7.3）和 Android SDK Platform 35：
+## Build
+
+Requires JDK 17 and Android SDK Platform 35.
 
 ```sh
-gradle :app:testDebugUnitTest
-gradle :app:assembleDebug
+./gradlew test
+./gradlew assembleDebug
+./gradlew connectedDebugAndroidTest
 ```
 
-APK 预期位于 `app/build/outputs/apk/debug/app-debug.apk`。当前生成工作区没有 Gradle/Android SDK/ADB/模拟器，且下载 Gradle 发行包超时，因此本交付为源码工程，未声称 APK 已生成。
-
-## 当前可用范围
-
-- 新建、编辑、查看、移入回收站
-- 标题、日期、备注、正数/倒数、当天计入、年度重复
-- Room 本地持久化
-- 可选当天 09:00 提醒；允许精确闹钟时用精确调度，否则回退非精确；开机及日期/时间/时区变化后恢复
-- 单事件 Widget 最小 provider：暂显示活动列表排序首项，点击进入详情
-- 日期引擎测试源码覆盖同日、前后一天、跨月/年、闰年、重复和 DST 日期语义
-
-高级功能和已知边界见 `docs/ARCHITECTURE.md`、`docs/REVERSE_GAPS.md`。
+The debug APK is written to `app/build/outputs/apk/debug/app-debug.apk`. GitHub Actions uploads it as a build artifact. Unit tests and APK build run in the `Unit tests and debug APK` job; emulator smoke runs in a separate job.
