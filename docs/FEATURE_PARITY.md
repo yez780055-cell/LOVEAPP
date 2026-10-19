@@ -1,6 +1,8 @@
 # Web Life Space 与 Native LOVEAPP 功能对照
 
-> 核对基线：Web Life Space `main` `636574116ef24022bfc985b16059a6b3f73b1bc5`；Native 代码已推进至三 feature 架构分支 `refactor/native-three-in-one`。Web 与原生存储不同，数据不会自动共享。
+> 核对基线：Web Life Space `main` `636574116ef24022bfc985b16059a6b3f73b1bc5`；Native 分支 `refactor/native-three-in-one`。Web 与原生存储不同，数据不会自动共享。
+>
+> **Native LOVEAPP 是对既有 Life Space 三合一产品的原生迁移，不是重新设计的新产品。** 产品核对以 Life Space 当前实际代码与测试为准。
 
 状态含义：**已有** = Native 当前代码可用；**部分** = 有基础实现但行为/范围有限；**未实现** = 当前 Native 不包含；**需核对** = 参考侧当前代码或规则需在功能迁移前逐项确认。
 
@@ -9,9 +11,11 @@
 | 应用壳 | Todo、Period、Anniversary 共用底部导航 | 单 Activity，Compose NavHost 与三 Tab | 部分 | 导航壳已实现；Todo/Period 业务仍是迁移骨架。 |
 | Tab 独立状态 | 由应用壳状态和 History 导航维护 | nested graph 使用 saveState/restoreState | 部分 | 导航状态保存已配置；真实设备交互 smoke 尚未运行通过。 |
 | Android 统一返回 | Web/Capacitor 共用导航 hook | Compose Navigation / 系统返回 | 部分 | Tab 子图、设置来源返回、周年详情/编辑返回由统一 NavController 管理；需设备 smoke 验收。 |
-| 个人任务 | 个人 Todo 模块、按日期/未完成操作 | Todo feature route、ViewModel、Repository 接口、Room Entity/DAO 骨架 | 部分 | 当前仍显示迁移占位，不包含个人待办产品流程。 |
-| 个人任务标签 | Todo 自身标签与筛选 | 无 Todo | 未实现 | 独立于纪念日分类。 |
-| Todo 重复任务 | recurrence 与 occurrence 模型 | 无 Todo | 未实现 | 需保留实例覆盖、完成状态及撤销语义。 |
+| 个人任务 | 今天/按日期与全部两视图；按日期切换；折叠已完成；新建、编辑、完成、恢复、删除 | Compose 页面及独立 Room todo_tasks | 已有 | 主 Tab 默认无导航动画；任务写入 Room。 |
+| 个人任务字段 | 标题、日期、时间、备注、标签、提醒 | Room 任务字段和原生编辑控件 | 部分 | 标签/备注可用；单次提醒使用 AlarmManager 并随开机/时间变化重排；周期实例提醒尚未补齐。 |
+| 个人任务标签 | 独立标签库；编辑时选已有或新建标签 | 独立 todo_tags、任务 tagsJson | 已有 | 当前 Web 个人视图没有标签筛选器；Native 不新增筛选入口。 |
+| 排序与日期 | 日期视图按日期/时间/创建时间排序；全部视图按日期分组且同日按创建时间排列 | Repository 对应两套排序；全部按日期分组 | 部分 | 需用 Web 原用例扩充跨日与同日排序回归测试。 |
+| 重复任务 | daily/weekly/monthly recurrence；occurrence 完成、跳过、改期和覆盖；系列编辑保留历史规则 | Room recurrence/occurrence 模型及日/周/月周期生成、完成、跳过、单次覆盖 | 部分 | Web 当前极简编辑器不提供新建/修改重复规则入口；Native 也保留已有规则。重复规则变更的历史版本、周/月边界测试待补。 |
 | 情侣任务 | couple 数据仓储和独立标签域 | 无 Couple 业务域 | 未实现 | 本架构阶段只建立 Todo/Period 骨架，尚未迁移情侣待办。 |
 | 情侣跨设备同步 | 当前 Web 有情侣空间交互，不能等同完整服务端同步 | 无账号或同步 | 未实现/需核对 | Native 首期保持本地优先；同步需另行决策。 |
 | Period 月历 | 实际记录与预测分色、按月浏览、日期详情 | Period feature route、ViewModel、Repository 接口、Room Entity/DAO 骨架 | 部分 | 当前仍是迁移占位，尚未实现月历业务流程。 |
@@ -42,4 +46,4 @@
 - Web README 仍有旧文字提到个人 Todo 子任务；当前实现与近期功能决策可能已经变化，迁移前应以源代码、测试和已接受的 PR 为准，不以过时 README 单独作为契约。
 - Web 的 `life-space` IndexedDB 与 Android Room 是不同存储；不能在没有用户导出/选择的情况下自动导入。
 - LOVEAPP `docs/BACKUP_FORMAT.md` 描述 ZIP/JSON 备份提案，并非已实现格式。
-- 架构分支 CI 的 JVM tests（含 Robolectric Room v1→v3 migration）和 debug build 可独立验收；Android emulator smoke 由于托管 runner 的 ADB 离线/Instrumentation crash 标为实验性，不能据此声称交互通过。
+- Native Room 当前为 v4；v1→v4 migration 必须通过并确认纪念日记录保留。emulator smoke 需要以本分支最新 CI 结果为准，不能仅以旧运行状态代替。

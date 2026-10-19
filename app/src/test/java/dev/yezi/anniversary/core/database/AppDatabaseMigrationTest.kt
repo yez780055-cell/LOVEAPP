@@ -34,6 +34,8 @@ class AppDatabaseMigrationTest {
             legacy.execSQL("CREATE INDEX index_background_images_eventId ON background_images(eventId)")
             legacy.execSQL("CREATE TABLE milestones (id TEXT NOT NULL, eventId TEXT NOT NULL, type TEXT NOT NULL, value INTEGER NOT NULL, occurrenceDate TEXT NOT NULL, generated INTEGER NOT NULL, title TEXT, createdAt INTEGER NOT NULL, PRIMARY KEY(id))")
             legacy.execSQL("CREATE INDEX index_milestones_eventId ON milestones(eventId)")
+            legacy.execSQL("CREATE TABLE todo_tasks (id TEXT NOT NULL, title TEXT NOT NULL, dueDate TEXT, isComplete INTEGER NOT NULL, scope TEXT NOT NULL, PRIMARY KEY(id))")
+            legacy.execSQL("INSERT INTO todo_tasks (id, title, dueDate, isComplete, scope) VALUES ('todo-old', '旧待办', '2026-10-20', 1, 'personal')")
             legacy.execSQL("INSERT INTO events (id,title,targetDate,createdAt,updatedAt,countingMode,includeDueDate,repeatType,repeatInterval,calendarType,timezone,note,isPinned,sortOrder) VALUES ('event-1','test','2026-10-19',1,1,'countDown',0,'none',1,'solar','Asia/Shanghai','',0,0)")
             legacy.execSQL("INSERT INTO reminders (id,eventId,enabled,triggerType,offsetDays,localTime,exact,nextTriggerAt,notificationChannel,requestCode) VALUES ('reminder-1','event-1',1,'on_day',0,'09:00',1,NULL,'anniversary_reminders',11)")
             legacy.version = 1
@@ -42,7 +44,7 @@ class AppDatabaseMigrationTest {
         }
 
         val database = Room.databaseBuilder(context, AppDatabase::class.java, name)
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
             .build()
         try {
             val migrated = database.openHelper.writableDatabase
@@ -67,6 +69,18 @@ class AppDatabaseMigrationTest {
             assertTrue("todo_tasks" in names)
             assertTrue("period_records" in names)
             assertTrue("period_settings" in names)
+
+            val todoColumnsCursor = migrated.query("PRAGMA table_info(todo_tasks)")
+            val todoColumns = mutableSetOf<String>()
+            todoColumnsCursor.use { while (it.moveToNext()) todoColumns += it.getString(1) }
+            assertTrue("note" in todoColumns)
+            assertTrue("tagsJson" in todoColumns)
+            assertTrue("recurrenceJson" in todoColumns)
+            assertTrue("completedAt" in todoColumns)
+            assertTrue("todo_tags" in names)
+            assertTrue("todo_occurrences" in names)
+            val oldTodo = migrated.query("SELECT title, dueDate, isComplete, completedAt FROM todo_tasks WHERE id = 'todo-old'")
+            oldTodo.use { assertTrue(it.moveToFirst()); assertEquals("旧待办", it.getString(0)); assertEquals("2026-10-20", it.getString(1)); assertEquals(1, it.getInt(2)); assertTrue(it.getLong(3) > 0) }
 
             val events = migrated.query("SELECT title FROM events WHERE id = 'event-1'")
             events.use { assertTrue(it.moveToFirst()); assertEquals("test", it.getString(0)) }

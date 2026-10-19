@@ -17,6 +17,6 @@ class LifeSpaceApp : Application() {
         )
     }
     val anniversaryViewModelFactory by lazy { EventViewModel.factory(anniversaryRepository) }
-    val todoViewModelFactory by lazy { TodoViewModel.factory() }
+    val todoViewModelFactory by lazy { TodoViewModel.factory(database.todoDao(), database.reminderDao(), applicationContext) }
     val periodViewModelFactory by lazy { PeriodViewModel.factory() }
 }

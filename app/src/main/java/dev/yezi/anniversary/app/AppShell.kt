@@ -1,6 +1,7 @@
 package dev.yezi.anniversary.app
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -28,6 +29,8 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.navigation
@@ -56,6 +59,7 @@ fun AppShell(todoViewModel: TodoViewModel, periodViewModel: PeriodViewModel, ann
         val title = if (destination?.hierarchy?.any { it.route == AppRoute.PERIOD_GRAPH } == true) "小月历" else "待办"
         LaunchedEffect(initialEventId) { initialEventId?.let { nav.navigate(AppRoute.anniversaryDetail(it)) } }
         Scaffold(
+            containerColor = AppColors.background,
             topBar = { if (showTabs && !onAnniversary) TopAppBar(title = { Text(title) }, actions = {
                 IconButton(onClick = { nav.navigate(AppRoute.SETTINGS) }) { Icon(Icons.Default.Settings, contentDescription = "设置") }
             }) },
@@ -65,7 +69,9 @@ fun AppShell(todoViewModel: TodoViewModel, periodViewModel: PeriodViewModel, ann
                 TabItem(nav, AppRoute.ANNIVERSARY_GRAPH, "纪念日", Icons.Default.Favorite)
             } }
         ) { padding ->
-            NavHost(nav, startDestination = AppRoute.TODO_GRAPH, modifier = Modifier.padding(padding)) {
+            NavHost(nav, startDestination = AppRoute.TODO_GRAPH, modifier = Modifier.padding(padding).background(AppColors.background),
+                enterTransition = { EnterTransition.None }, exitTransition = { ExitTransition.None },
+                popEnterTransition = { EnterTransition.None }, popExitTransition = { ExitTransition.None }) {
                 navigation(startDestination = AppRoute.TODO_HOME, route = AppRoute.TODO_GRAPH) {
                     composable(AppRoute.TODO_HOME) { TodoRoute(todoViewModel) }
                 }

@@ -16,6 +16,8 @@ import dev.yezi.anniversary.feature.period.data.PeriodRecordEntity
 import dev.yezi.anniversary.feature.period.data.PeriodSettingsEntity
 import dev.yezi.anniversary.feature.todo.data.TodoDao
 import dev.yezi.anniversary.feature.todo.data.TodoTaskEntity
+import dev.yezi.anniversary.feature.todo.data.TodoTagEntity
+import dev.yezi.anniversary.feature.todo.data.TodoOccurrenceEntity
 
 @Database(
     entities = [
@@ -25,10 +27,12 @@ import dev.yezi.anniversary.feature.todo.data.TodoTaskEntity
         BackgroundImageEntity::class,
         MilestoneEntity::class,
         TodoTaskEntity::class,
+        TodoTagEntity::class,
+        TodoOccurrenceEntity::class,
         PeriodRecordEntity::class,
         PeriodSettingsEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -42,10 +46,30 @@ abstract class AppDatabase : RoomDatabase() {
 
         fun get(context: Context): AppDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "anniversary.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
                 .also { instance = it }
         }
+    }
+}
+
+val MIGRATION_3_4: Migration = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE todo_tasks ADD COLUMN note TEXT NOT NULL DEFAULT ''")
+        db.execSQL("ALTER TABLE todo_tasks ADD COLUMN scheduledTime TEXT")
+        db.execSQL("ALTER TABLE todo_tasks ADD COLUMN tagsJson TEXT NOT NULL DEFAULT '[]'")
+        db.execSQL("ALTER TABLE todo_tasks ADD COLUMN createdAt INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE todo_tasks ADD COLUMN updatedAt INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE todo_tasks ADD COLUMN completedAt INTEGER")
+        db.execSQL("ALTER TABLE todo_tasks ADD COLUMN recurrenceJson TEXT")
+        db.execSQL("ALTER TABLE todo_tasks ADD COLUMN recurrenceHistoryJson TEXT NOT NULL DEFAULT '[]'")
+        db.execSQL("ALTER TABLE todo_tasks ADD COLUMN seriesId TEXT")
+        db.execSQL("ALTER TABLE todo_tasks ADD COLUMN reminderEnabled INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE todo_tasks ADD COLUMN reminderMinutesBefore INTEGER NOT NULL DEFAULT 10")
+        db.execSQL("UPDATE todo_tasks SET createdAt = strftime('%s','now') * 1000, updatedAt = strftime('%s','now') * 1000, completedAt = CASE WHEN isComplete = 1 THEN strftime('%s','now') * 1000 ELSE NULL END")
+        db.execSQL("CREATE TABLE IF NOT EXISTS todo_tags (id TEXT NOT NULL, name TEXT NOT NULL, normalizedName TEXT NOT NULL, color TEXT, createdAt INTEGER NOT NULL, PRIMARY KEY(id))")
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_todo_tags_normalizedName ON todo_tags(normalizedName)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS todo_occurrences (taskId TEXT NOT NULL, periodDate TEXT NOT NULL, scheduledDate TEXT NOT NULL, completedAt INTEGER, titleOverride TEXT, noteOverride TEXT, timeOverride TEXT, tagsOverrideJson TEXT, reminderEnabledOverride INTEGER, reminderMinutesBeforeOverride INTEGER, skipped INTEGER NOT NULL, updatedAt INTEGER NOT NULL, PRIMARY KEY(taskId, periodDate))")
     }
 }
 

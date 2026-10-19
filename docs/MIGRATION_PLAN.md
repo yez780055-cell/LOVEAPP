@@ -2,6 +2,8 @@
 
 > 计划基线：LOVEAPP main `40af636d95d0e0e222c7eac888a33a43f64a062e`。本文件是实施顺序与验收门槛，不表示下列功能已经开发。
 
+**产品基线原则：Native LOVEAPP 是对既有 Life Space 三合一产品的原生迁移，不是重新设计的新产品。** 以 `life-space` 当前 `main` 的实际实现和测试为准，旧 README 或历史迁移文档不能覆盖运行代码。
+
 ## 原则
 
 - 先锁定现有纪念日数据库和行为，再引入新模块。
@@ -62,6 +64,8 @@
 - repository transaction 与通知重排失败有明确一致性策略。
 
 ## Phase 3：实现 Todo 域
+
+本轮从 `src/modules/todo/data/model.ts`、`repository.ts`、`dates.ts`、`recurrence.ts`、`PersonalTodoView.tsx`、`TodoModule.tsx` 及其 repository/recurrence/UI 测试核对个人 Todo。个人 Todo 极简界面保留“按日期/全部”、折叠已完成、日期/时间、标签、提醒和备注；重复规则与周期记录保留在数据域，当前 Web 编辑器不提供新建/调整重复规则的入口。个人子任务已移除。
 
 **顺序**
 

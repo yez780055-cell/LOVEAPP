@@ -10,6 +10,9 @@
         <receiver android:name=".feature.anniversary.notification.AnniversaryReminderReceiver" android:exported="false">
             <intent-filter><action android:name="dev.yezi.anniversary.action.ANNIVERSARY_REMINDER" /></intent-filter>
         </receiver>
+        <receiver android:name=".feature.todo.notification.TodoReminderReceiver" android:exported="false">
+            <intent-filter><action android:name="dev.yezi.anniversary.action.TODO_REMINDER" /></intent-filter>
+        </receiver>
         <receiver android:name=".core.notification.SystemChangeReceiver" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
