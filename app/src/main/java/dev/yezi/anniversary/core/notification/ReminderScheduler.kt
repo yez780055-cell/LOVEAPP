@@ -11,6 +11,7 @@ object ReminderScheduler {
     const val EXTRA_SOURCE_TYPE = "source_type"
     const val EXTRA_SOURCE_ID = "source_id"
     const val EXTRA_REMINDER_ID = "reminder_id"
+    const val EXTRA_RESCHEDULE = "reschedule"
 
     fun schedule(context: Context, spec: ReminderScheduleSpec): Long? {
         val reminder = spec.reminder
@@ -34,6 +35,16 @@ object ReminderScheduler {
             alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pending)
         }
         return triggerAt
+    }
+
+    fun requestReschedule(context: Context, reminder: ReminderEntity) {
+        val intent = Intent(reminder.deliveryAction)
+            .setPackage(context.packageName)
+            .putExtra(EXTRA_SOURCE_TYPE, reminder.sourceType)
+            .putExtra(EXTRA_SOURCE_ID, reminder.sourceId)
+            .putExtra(EXTRA_REMINDER_ID, reminder.id)
+            .putExtra(EXTRA_RESCHEDULE, true)
+        context.sendBroadcast(intent)
     }
 
     fun cancel(context: Context, reminder: ReminderEntity) {

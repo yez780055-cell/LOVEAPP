@@ -6,7 +6,7 @@ LOVEAPP is the Android native foundation for bringing Todo, Period, and Annivers
 
 - One Activity with Navigation Compose and three state-restoring bottom navigation destinations: 待办、小月历、纪念日.
 - Feature packages are separated under `app/src/main/java/dev/yezi/anniversary/feature/`; the anniversary-specific RemoteViews widget and reminder delivery adapter live inside Anniversary. Core owns generic Room reminder records, DAO, and an absolute-time AlarmManager scheduler.
-- Anniversary data remains in `anniversary.db`. Room v1→v2 adds Todo and Period tables and maps legacy reminder `eventId` to `sourceType/sourceId`; v2→v3 removes the Anniversary-only reminder column while preserving existing records and scheduling settings.
+- Anniversary data remains in `anniversary.db`. Room v1→v2 adds Todo and Period tables and maps legacy reminder `eventId` to `sourceType/sourceId`; v2→v3 removes the legacy Anniversary-only `eventId` column while preserving existing records and scheduling settings.
 - Todo and Period mount feature-owned routes, repositories/ViewModels, entities, and DAOs, but remain migration placeholders. Backup, media storage, and app-preference interfaces are contracts only; their product workflows are not implemented.
 - The application ID remains `dev.yezi.anniversary` to preserve Android upgrade identity.
 

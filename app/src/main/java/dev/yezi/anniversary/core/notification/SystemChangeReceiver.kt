@@ -14,10 +14,7 @@ class SystemChangeReceiver : BroadcastReceiver() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 AppDatabase.get(context).reminderDao().getEnabledReminders().forEach { reminder ->
-                    ReminderScheduler.schedule(
-                        context,
-                        ReminderScheduleSpec(reminder, reminder.nextTriggerAt)
-                    )
+                    ReminderScheduler.requestReschedule(context, reminder)
                 }
             } finally {
                 pending.finish()

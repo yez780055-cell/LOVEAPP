@@ -15,7 +15,6 @@ import androidx.core.content.ContextCompat
 import dev.yezi.anniversary.R
 import dev.yezi.anniversary.app.MainActivity
 import dev.yezi.anniversary.core.database.AppDatabase
-import dev.yezi.anniversary.core.notification.ReminderScheduleSpec
 import dev.yezi.anniversary.core.notification.ReminderScheduler
 import dev.yezi.anniversary.feature.anniversary.data.AnniversaryReminderSchedule
 import kotlinx.coroutines.CoroutineScope
@@ -38,6 +37,13 @@ class AnniversaryReminderReceiver : BroadcastReceiver() {
                     reminder.sourceType != AnniversaryReminderSchedule.SOURCE_TYPE ||
                     reminder.sourceId != event.id
                 ) return@launch
+
+                if (intent.getBooleanExtra(ReminderScheduler.EXTRA_RESCHEDULE, false)) {
+                    val updated = AnniversaryReminderSchedule.resolve(event, reminder)
+                    database.reminderDao().upsert(updated.reminder)
+                    ReminderScheduler.schedule(context, updated)
+                    return@launch
+                }
 
                 createChannel(context, reminder.notificationChannel)
                 val notificationsAllowed = Build.VERSION.SDK_INT < 33 ||
