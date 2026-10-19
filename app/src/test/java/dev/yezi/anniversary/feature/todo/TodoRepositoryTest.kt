@@ -80,4 +80,14 @@ class TodoRepositoryTest {
         assertTrue(repo.instances("2026-10-17", false).isEmpty())
         assertEquals(1, repo.instances("2026-10-13", false).size)
     }
+
+    @Test fun recurrenceIntervalsAndSkippedMonthlyDatesMatchCalendarRules() = runBlocking {
+        repo.save(TodoDraft("隔周任务", "2026-10-19", null, "", emptyList(), RepeatRule("weekly", 2, "2026-10-19", weekdays = listOf(1))))
+        repo.save(TodoDraft("月末任务", "2026-01-31", null, "", emptyList(), RepeatRule("monthly", 1, "2026-01-31")))
+        assertTrue(repo.instances("2026-10-26", false).isEmpty())
+        assertEquals("隔周任务", repo.instances("2026-11-02", false).single().title)
+        assertEquals("月末任务", repo.instances("2026-01-31", false).single().title)
+        assertTrue(repo.instances("2026-02-28", false).isEmpty())
+        assertEquals("月末任务", repo.instances("2026-03-31", false).single().title)
+    }
 }

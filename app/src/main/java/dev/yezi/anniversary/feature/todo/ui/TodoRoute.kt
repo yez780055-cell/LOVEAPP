@@ -27,6 +27,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import dev.yezi.anniversary.feature.todo.domain.TodoDraft
 import dev.yezi.anniversary.feature.todo.domain.TodoItem
@@ -80,30 +81,38 @@ fun TodoScreen(state: TodoUiState, vm: TodoViewModel) {
             }
         }
         if (state.error != null) Text(state.error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-        val shown = if (state.completedOpen) completed else pending
-        if (shown.isEmpty()) {
+        if (pending.isEmpty() && (!state.completedOpen || completed.isEmpty())) {
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Text(if (state.completedOpen) "还没有已完成的待办。" else if (state.all) "还没有未完成的待办。" else "这一天没有未完成的待办。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(if (state.all) "还没有未完成的待办。" else "这一天没有未完成的待办。", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {
             LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(top = 8.dp, bottom = 20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (state.all) {
-                    shown.groupBy { it.date ?: "" }.forEach { (date, group) ->
+                if (pending.isEmpty()) item { Text(if (state.all) "还没有未完成的待办。" else "这一天没有未完成的待办。", Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                else if (state.all) {
+                    pending.groupBy { it.date ?: "" }.forEach { (date, group) ->
                         item(key = "header-$date") { Text(if (date.isBlank()) "未设置日期" else prettyDate(date), Modifier.padding(top = 12.dp, bottom = 4.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary) }
                         items(group, key = { it.key }) { task -> TodoRow(task, state.tags.associate { it.id to it.name }, { toggleTask(task) }, { editor = task }) }
                     }
-                } else items(shown, key = { it.key }) { task -> TodoRow(task, state.tags.associate { it.id to it.name }, { toggleTask(task) }, { editor = task }) }
+                } else items(pending, key = { it.key }) { task -> TodoRow(task, state.tags.associate { it.id to it.name }, { toggleTask(task) }, { editor = task }) }
+                if (state.completedOpen) {
+                    item(key = "completed-heading") { Text("已完成", Modifier.padding(top = 16.dp, bottom = 4.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    if (completed.isEmpty()) item { Text("还没有已完成的待办。", Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    else if (state.all) completed.groupBy { it.date ?: "" }.forEach { (date, group) ->
+                        item(key = "completed-header-$date") { Text(if (date.isBlank()) "未设置日期" else prettyDate(date), Modifier.padding(top = 8.dp, bottom = 4.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary) }
+                        items(group, key = { "completed-${it.key}" }) { task -> TodoRow(task, state.tags.associate { it.id to it.name }, { toggleTask(task) }, { editor = task }) }
+                    } else items(completed, key = { "completed-${it.key}" }) { task -> TodoRow(task, state.tags.associate { it.id to it.name }, { toggleTask(task) }, { editor = task }) }
+                }
             }
         }
         undoItem?.let { item -> Snackbar(Modifier.fillMaxWidth().padding(bottom = 12.dp), action = { TextButton(onClick = { vm.setCompleted(item, false); undoItem = null }) { Text("撤销") } }) { Text("已完成") } }
     }
-    if (adding) QuickTodoAddDialog(state, onClose = { adding = false }, onSave = { vm.save(it); adding = false })
+    if (adding) QuickTodoAddDialog(state, onClose = { adding = false }, onSave = { draft, added -> vm.save(draft, added) })
     editor?.let { task -> TodoEditor(task, state, onClose = { editor = null }, onSave = { vm.save(it); editor = null }, onDelete = { vm.remove(task); editor = null }, onCreateTag = { name, callback -> vm.createTag(name, callback) }) }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun QuickTodoAddDialog(state: TodoUiState, onClose: () -> Unit, onSave: (TodoDraft) -> Unit) {
+private fun QuickTodoAddDialog(state: TodoUiState, onClose: () -> Unit, onSave: (TodoDraft, () -> Unit) -> Unit) {
     var title by remember { mutableStateOf("") }
     var date by remember { mutableStateOf(if (state.all) LocalDate.now().toString() else state.date) }
     var noDate by remember { mutableStateOf(false) }
@@ -112,13 +121,13 @@ private fun QuickTodoAddDialog(state: TodoUiState, onClose: () -> Unit, onSave: 
     AlertDialog(onDismissRequest = onClose,
         title = { Text("快速添加") },
         text = { Column {
-            OutlinedTextField(title, { title = it.take(500) }, Modifier.fillMaxWidth(), label = { Text("任务内容") }, singleLine = true)
+            OutlinedTextField(title, { title = it.take(500) }, Modifier.fillMaxWidth().testTag("quick-todo-title"), label = { Text("任务内容") }, singleLine = true)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = { showDate = true }, modifier = Modifier.weight(1f)) { Text(if (noDate) "选择日期" else prettyDate(date)) }
                 TextButton(onClick = { noDate = !noDate }) { Text(if (noDate) "恢复日期" else "不设日期") }
             }
         } },
-        confirmButton = { TextButton(onClick = { if (title.isNotBlank()) onSave(TodoDraft(title, if (noDate) null else date, null, "", emptyList())) }, enabled = title.isNotBlank()) { Text("添加") } },
+        confirmButton = { TextButton(onClick = { if (title.isNotBlank()) onSave(TodoDraft(title, if (noDate) null else date, null, "", emptyList())) { title = "" } }, enabled = title.isNotBlank()) { Text("添加") } },
         dismissButton = { TextButton(onClick = onClose) { Text("关闭") } }
     )
     if (showDate) DatePickerDialog(onDismissRequest = { showDate = false }, confirmButton = { TextButton(onClick = { picker.selectedDateMillis?.let { date = LocalDate.ofEpochDay(it / 86_400_000).toString(); noDate = false }; showDate = false }) { Text("确定") } }, dismissButton = { TextButton(onClick = { showDate = false }) { Text("取消") } }) { DatePicker(picker) }

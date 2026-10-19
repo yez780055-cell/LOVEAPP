@@ -5,9 +5,11 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextClearance
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
 import org.junit.Rule
@@ -25,8 +27,14 @@ class MainActivitySmokeTest {
         compose.onNodeWithContentDescription("快速新增待办").performClick()
         compose.onNodeWithText("任务内容").performClick()
         compose.onNodeWithText("任务内容").performTextInput(title)
-        compose.onNodeWithText("保存").performClick()
+        compose.onNodeWithText("添加").performClick()
+        compose.waitUntil(5_000) { compose.onNodeWithTag("quick-todo-title").fetchSemanticsNodes().singleOrNull()?.config?.getOrNull(SemanticsProperties.EditableText)?.text?.isEmpty() == true }
+        val secondTitle = "$title-repeat"
+        compose.onNodeWithTag("quick-todo-title").performTextInput(secondTitle)
+        compose.onNodeWithText("添加").performClick()
+        compose.onNodeWithText("关闭").performClick()
         compose.waitUntil(5_000) { compose.onAllNodes(androidx.compose.ui.test.hasText(title)).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText(secondTitle).assertIsDisplayed()
         compose.onNodeWithText(title).performClick()
         compose.onNodeWithText(title).performTextClearance()
         compose.onNodeWithText("任务内容").performTextInput("$title-edited")
@@ -34,6 +42,7 @@ class MainActivitySmokeTest {
         compose.onNodeWithText("$title-edited").assertIsDisplayed()
         compose.onNodeWithContentDescription("完成任务：$title-edited").performClick()
         compose.onNodeWithText("已完成 1 ⌄", substring = true).performClick()
+        compose.onNodeWithText(secondTitle).assertIsDisplayed()
         compose.onNodeWithContentDescription("恢复任务：$title-edited").assertIsDisplayed().performClick()
         compose.onNodeWithContentDescription("小月历").performClick()
         compose.onNodeWithText("小月历模块迁移中").assertIsDisplayed()

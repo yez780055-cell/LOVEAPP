@@ -24,11 +24,13 @@ class TodoViewModel(private val repository: TodoRepository) : ViewModel() {
     private val mutableState = MutableStateFlow(TodoUiState())
     val uiState: StateFlow<TodoUiState> = mutableState.asStateFlow()
     init { viewModelScope.launch { repository.observeTags().collect { mutableState.value = mutableState.value.copy(tags = it) } }; refresh() }
-    fun setDate(date: String) { mutableState.value = mutableState.value.copy(date = date); refresh() }
+    fun setDate(date: String) { mutableState.value = mutableState.value.copy(date = date, completedOpen = false); refresh() }
     fun shiftDate(delta: Long) { setDate(runCatching { LocalDate.parse(mutableState.value.date).plusDays(delta).toString() }.getOrDefault(LocalDate.now().toString())) }
     fun setAll(all: Boolean) { mutableState.value = mutableState.value.copy(all = all, completedOpen = false); refresh() }
     fun toggleCompleted() { mutableState.value = mutableState.value.copy(completedOpen = !mutableState.value.completedOpen) }
-    fun save(draft: TodoDraft) = perform { repository.save(draft) }
+    fun save(draft: TodoDraft, onSuccess: () -> Unit = {}) { viewModelScope.launch {
+        runCatching { repository.save(draft) }.onSuccess { mutableState.value = mutableState.value.copy(error = null); refresh(); onSuccess() }.onFailure { mutableState.value = mutableState.value.copy(error = it.message ?: "保存失败") }
+    } }
     fun remove(item: TodoItem) = perform { repository.remove(item) }
     fun toggle(item: TodoItem) = perform { repository.complete(item, item.completedAt == null) }
     fun setCompleted(item: TodoItem, done: Boolean) = perform { repository.complete(item, done) }
