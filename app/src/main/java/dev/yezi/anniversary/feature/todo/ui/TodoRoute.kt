@@ -55,7 +55,8 @@ fun TodoScreen(state: TodoUiState, vm: TodoViewModel) {
         if (task.completedAt == null) undoItem = task else if (undoItem?.key == task.key) undoItem = null
         vm.toggle(task)
     }
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(horizontal = 20.dp).pointerInput(state.all, state.date) {
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    Column(Modifier.fillMaxSize().padding(horizontal = 20.dp).pointerInput(state.all, state.date) {
         var distance = 0f
         detectHorizontalDragGestures(onDragEnd = { if (!state.all && kotlin.math.abs(distance) > 58f) vm.shiftDate(if (distance < 0) 1 else -1); distance = 0f }, onHorizontalDrag = { change, amount -> distance += amount; change.consume() })
     }) {
@@ -64,7 +65,6 @@ fun TodoScreen(state: TodoUiState, vm: TodoViewModel) {
                 Text("个人待办", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
                 Text("${pending.size} 项未完成 · ${prettyDate(if (state.all) LocalDate.now().toString() else state.date)}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            IconButton(onClick = { adding = true }) { Icon(Icons.Default.Add, "快速新增待办") }
         }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             FilterChip(selected = !state.all, onClick = { vm.setAll(false) }, label = { Text("按日期") })
@@ -86,7 +86,7 @@ fun TodoScreen(state: TodoUiState, vm: TodoViewModel) {
                 Text(if (state.all) "还没有未完成的待办。" else "这一天没有未完成的待办。", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {
-            LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(top = 8.dp, bottom = 20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(top = 8.dp, bottom = 88.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (pending.isEmpty()) item { Text(if (state.all) "还没有未完成的待办。" else "这一天没有未完成的待办。", Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 else if (state.all) {
                     pending.groupBy { it.date ?: "" }.forEach { (date, group) ->
@@ -105,6 +105,8 @@ fun TodoScreen(state: TodoUiState, vm: TodoViewModel) {
             }
         }
         undoItem?.let { item -> Snackbar(Modifier.fillMaxWidth().padding(bottom = 12.dp), action = { TextButton(onClick = { vm.setCompleted(item, false); undoItem = null }) { Text("撤销") } }) { Text("已完成") } }
+    }
+    ExtendedFloatingActionButton(onClick = { adding = true }, modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).semantics { contentDescription = "快速新增待办" }, icon = { Icon(Icons.Default.Add, null) }, text = { Text("记一件事") }, containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary)
     }
     if (adding) QuickTodoAddDialog(state, onClose = { adding = false }, onSave = { draft, added -> vm.save(draft, added) })
     editor?.let { task -> TodoEditor(task, state, onClose = { editor = null }, onSave = { vm.save(it); editor = null }, onDelete = { vm.remove(task); editor = null }, onCreateTag = { name, callback -> vm.createTag(name, callback) }) }
@@ -144,7 +146,7 @@ private fun TodoRow(item: TodoItem, labels: Map<String, String>, onToggle: () ->
             }
             Column(Modifier.weight(1f).padding(start = 8.dp)) {
                 Text(item.title, style = if (item.completedAt != null) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge, color = if (item.completedAt != null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)
-                val meta = buildList { item.time?.let(::add); item.tags.mapNotNull { labels[it] }.forEach(::add); if (item.recurrence != null) add("重复") }
+                val meta = buildList { item.time?.let(::add); item.tags.mapNotNull { labels[it] }.forEach(::add) }
                 if (meta.isNotEmpty()) Text(meta.joinToString("  ·  "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (item.completedAt != null) TextButton(onClick = onToggle) { Text("恢复") } else IconButton(onClick = onEdit) { Icon(Icons.Default.Edit, "编辑任务") }
@@ -178,7 +180,7 @@ private fun TodoEditor(item: TodoItem?, state: TodoUiState, onClose: () -> Unit,
                 OutlinedTextField(title, { title = it.take(500) }, Modifier.fillMaxWidth(), label = { Text("任务内容") }, singleLine = true)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = { showDatePicker = true }, modifier = Modifier.weight(1f)) { Text(if (noDate) "选择日期" else prettyDate(date)) }
-                    TextButton(onClick = { noDate = !noDate; if (noDate) { time = ""; reminder = false } }) { Text(if (noDate) "恢复日期" else "不设日期") }
+                    TextButton(onClick = { noDate = !noDate; if (noDate) { time = ""; reminder = false } }, enabled = item?.periodDate == null) { Text(if (noDate) "恢复日期" else "不设日期") }
                 }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = {
