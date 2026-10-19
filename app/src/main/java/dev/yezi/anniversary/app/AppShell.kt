@@ -1,5 +1,10 @@
 package dev.yezi.anniversary.app
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckBox
@@ -9,14 +14,17 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -25,6 +33,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.NavDestination.Companion.hierarchy
+import dev.yezi.anniversary.core.design.AppColors
 import dev.yezi.anniversary.core.design.LifeSpaceTheme
 import dev.yezi.anniversary.feature.anniversary.presentation.EventViewModel
 import dev.yezi.anniversary.feature.anniversary.ui.anniversaryGraph
@@ -73,14 +82,20 @@ fun AppShell(todoViewModel: TodoViewModel, periodViewModel: PeriodViewModel, ann
 }
 
 @Composable
-private fun TabItem(nav: NavHostController, route: String, label: String, icon: androidx.compose.ui.graphics.vector.ImageVector) {
+private fun RowScope.TabItem(nav: NavHostController, route: String, label: String, icon: ImageVector) {
     val entry by nav.currentBackStackEntryAsState()
     val selected = entry?.destination?.hierarchy?.any { it.route == route } == true
-    NavigationBarItem(selected = selected, onClick = {
-        nav.navigate(route) {
-            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
-            launchSingleTop = true
-            restoreState = true
-        }
-    }, icon = { Icon(icon, contentDescription = label) }, label = { Text(label) })
+    Column(
+        modifier = Modifier.weight(1f).clickable {
+            nav.navigate(route) {
+                popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                launchSingleTop = true
+                restoreState = true
+            }
+        }.padding(vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(icon, contentDescription = label, tint = if (selected) AppColors.primary else Color.Gray)
+        Text(label, color = if (selected) AppColors.primary else Color.Gray)
+    }
 }
