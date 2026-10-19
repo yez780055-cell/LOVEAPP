@@ -3,7 +3,7 @@ package dev.yezi.anniversary.app
 import android.Manifest
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -19,11 +19,11 @@ class MainActivitySmokeTest {
 
     @Test fun allFeatureTabsCanBeOpened() {
         compose.onNodeWithText("待办模块迁移中").assertIsDisplayed()
-        compose.onAllNodesWithText("小月历").onLast().performClick()
+        compose.onNodeWithContentDescription("小月历").performClick()
         compose.onNodeWithText("小月历模块迁移中").assertIsDisplayed()
-        compose.onAllNodesWithText("纪念日").onLast().performClick()
+        compose.onNodeWithContentDescription("纪念日").performClick()
         compose.onNodeWithText("记录一个重要的日子").assertIsDisplayed()
-        compose.onAllNodesWithText("待办").onLast().performClick()
+        compose.onNodeWithContentDescription("待办").performClick()
         compose.onNodeWithText("待办模块迁移中").assertIsDisplayed()
     }
 }
