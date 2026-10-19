@@ -28,7 +28,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextDecoration
 import dev.yezi.anniversary.feature.todo.domain.TodoDraft
 import dev.yezi.anniversary.feature.todo.domain.TodoItem
 import dev.yezi.anniversary.feature.todo.presentation.TodoUiState
@@ -112,7 +111,7 @@ private fun TodoRow(item: TodoItem, labels: Map<String, String>, onToggle: () ->
                 }
             }
             Column(Modifier.weight(1f).padding(start = 8.dp)) {
-                Text(item.title, style = MaterialTheme.typography.bodyLarge, textDecoration = if (item.completedAt != null) TextDecoration.LineThrough else null)
+                Text(item.title, style = if (item.completedAt != null) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge, color = if (item.completedAt != null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)
                 val meta = buildList { item.time?.let(::add); item.tags.mapNotNull { labels[it] }.forEach(::add); if (item.recurrence != null) add("重复") }
                 if (meta.isNotEmpty()) Text(meta.joinToString("  ·  "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }

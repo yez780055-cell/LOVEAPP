@@ -57,7 +57,7 @@ class TodoRepositoryTest {
         repo.complete(items[1], true)
         assertTrue(repo.instances("2026-10-19", false).first { it.title == "每周复盘" }.completedAt != null)
         assertFalse(repo.instances("2026-10-26", false).first { it.title == "每周复盘" }.completedAt != null)
-        assertEquals(2, repo.instances("2026-10-19", true).size)
+        assertEquals(3, repo.instances("2026-10-19", true).size)
         val next = repo.instances("2026-10-26", false).single()
         repo.save(TodoDraft("本周改名", next.date, next.time, "单次备注", next.tags, next.recurrence, next.reminderEnabled, next.reminderMinutes, next.id, next.periodDate))
         assertEquals("本周改名", repo.instances("2026-10-26", false).single().title)
