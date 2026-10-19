@@ -64,3 +64,9 @@ dependencies {
 }
 
 room { schemaDirectory("$projectDir/schemas") }
+
+tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
+    testLogging {
+        events("passed", "skipped", "failed")
+    }
+}
