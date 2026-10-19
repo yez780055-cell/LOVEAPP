@@ -64,7 +64,8 @@ jobs:
       - name: Run instrumentation smoke test on emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
+          api-level: 33
+          target: google_apis
           arch: x86_64
           profile: pixel_2
           script: ./gradlew --no-daemon connectedDebugAndroidTest
