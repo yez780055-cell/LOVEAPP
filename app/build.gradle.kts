@@ -24,11 +24,13 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+    testOptions { unitTests.isIncludeAndroidResources = true }
 }
 
 dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2024.12.01")
     implementation(composeBom)
+    testImplementation(composeBom)
     androidTestImplementation(composeBom)
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.activity:activity-compose:1.10.0")
@@ -52,6 +54,8 @@ dependencies {
     testImplementation("androidx.test:core:1.6.1")
     testImplementation("androidx.room:room-testing:2.6.1")
     testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi-compose:1.44.0")
+    testImplementation("androidx.compose.ui:ui-test-junit4")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
 
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
@@ -67,6 +71,7 @@ dependencies {
 room { schemaDirectory("$projectDir/schemas") }
 
 tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
+    systemProperty("loveapp.screenshots.dir", layout.buildDirectory.dir("ui-screenshots").get().asFile.absolutePath)
     testLogging {
         events("passed", "skipped", "failed")
     }

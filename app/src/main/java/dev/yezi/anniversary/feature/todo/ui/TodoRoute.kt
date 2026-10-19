@@ -40,25 +40,30 @@ import android.app.TimePickerDialog
 @Composable
 fun TodoRoute(viewModel: TodoViewModel) {
     val state by viewModel.uiState.collectAsState()
-    TodoScreen(state, viewModel)
+    TodoScreen(state, TodoActions(
+        setDate = viewModel::setDate, shiftDate = viewModel::shiftDate,
+        setAll = viewModel::setAll, toggleCompleted = viewModel::toggleCompleted,
+        toggle = viewModel::toggle, setCompleted = viewModel::setCompleted,
+        save = viewModel::save, remove = viewModel::remove, createTag = viewModel::createTag,
+    ))
 }
 
 @Composable
-fun TodoScreen(state: TodoUiState, vm: TodoViewModel) {
+fun TodoScreen(state: TodoUiState, actions: TodoActions, initialDialog: TodoPreviewDialog? = null, previewItem: TodoItem? = null) {
     val pending = state.tasks.filter { it.completedAt == null }
     val completed = state.tasks.filter { it.completedAt != null }
-    var editor by remember { mutableStateOf<TodoItem?>(null) }
-    var adding by remember { mutableStateOf(false) }
+    var editor by remember { mutableStateOf(if (initialDialog == TodoPreviewDialog.EDIT) previewItem else null) }
+    var adding by remember { mutableStateOf(initialDialog == TodoPreviewDialog.CREATE) }
     var undoItem by remember { mutableStateOf<TodoItem?>(null) }
     LaunchedEffect(undoItem?.key) { if (undoItem != null) { delay(2_000); undoItem = null } }
     fun toggleTask(task: TodoItem) {
         if (task.completedAt == null) undoItem = task else if (undoItem?.key == task.key) undoItem = null
-        vm.toggle(task)
+        actions.toggle(task)
     }
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp).pointerInput(state.all, state.date) {
         var distance = 0f
-        detectHorizontalDragGestures(onDragEnd = { if (!state.all && kotlin.math.abs(distance) > 58f) vm.shiftDate(if (distance < 0) 1 else -1); distance = 0f }, onHorizontalDrag = { change, amount -> distance += amount; change.consume() })
+        detectHorizontalDragGestures(onDragEnd = { if (!state.all && kotlin.math.abs(distance) > 58f) actions.shiftDate(if (distance < 0) 1 else -1); distance = 0f }, onHorizontalDrag = { change, amount -> distance += amount; change.consume() })
     }) {
         Row(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -67,17 +72,17 @@ fun TodoScreen(state: TodoUiState, vm: TodoViewModel) {
             }
         }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            FilterChip(selected = !state.all, onClick = { vm.setAll(false) }, label = { Text("按日期") })
-            Spacer(Modifier.width(8.dp)); FilterChip(selected = state.all, onClick = { vm.setAll(true) }, label = { Text("全部") })
+            FilterChip(selected = !state.all, onClick = { actions.setAll(false) }, label = { Text("按日期") })
+            Spacer(Modifier.width(8.dp)); FilterChip(selected = state.all, onClick = { actions.setAll(true) }, label = { Text("全部") })
             Spacer(Modifier.weight(1f))
             TextButton(onClick = vm::toggleCompleted) { Text("已完成 ${completed.size} ${if (state.completedOpen) "⌃" else "⌄"}") }
         }
         if (!state.all) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { vm.shiftDate(-1) }) { Icon(Icons.Default.KeyboardArrowLeft, "前一天") }
+                IconButton(onClick = { actions.shiftDate(-1) }) { Icon(Icons.Default.KeyboardArrowLeft, "前一天") }
                 Text(prettyDate(state.date), style = MaterialTheme.typography.titleMedium)
-                IconButton(onClick = { vm.shiftDate(1) }) { Icon(Icons.Default.KeyboardArrowRight, "后一天") }
-                if (state.date != LocalDate.now().toString()) TextButton(onClick = { vm.setDate(LocalDate.now().toString()) }) { Text("回到今天") }
+                IconButton(onClick = { actions.shiftDate(1) }) { Icon(Icons.Default.KeyboardArrowRight, "后一天") }
+                if (state.date != LocalDate.now().toString()) TextButton(onClick = { actions.setDate(LocalDate.now().toString()) }) { Text("回到今天") }
             }
         }
         if (state.error != null) Text(state.error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
@@ -104,12 +109,12 @@ fun TodoScreen(state: TodoUiState, vm: TodoViewModel) {
                 }
             }
         }
-        undoItem?.let { item -> Snackbar(Modifier.fillMaxWidth().padding(bottom = 12.dp), action = { TextButton(onClick = { vm.setCompleted(item, false); undoItem = null }) { Text("撤销") } }) { Text("已完成") } }
+        undoItem?.let { item -> Snackbar(Modifier.fillMaxWidth().padding(bottom = 12.dp), action = { TextButton(onClick = { actions.setCompleted(item, false); undoItem = null }) { Text("撤销") } }) { Text("已完成") } }
     }
     ExtendedFloatingActionButton(onClick = { adding = true }, modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).semantics { contentDescription = "快速新增待办" }, icon = { Icon(Icons.Default.Add, null) }, text = { Text("记一件事") }, containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary)
     }
-    if (adding) QuickTodoAddDialog(state, onClose = { adding = false }, onSave = { draft, added -> vm.save(draft, added) })
-    editor?.let { task -> TodoEditor(task, state, onClose = { editor = null }, onSave = { vm.save(it); editor = null }, onDelete = { vm.remove(task); editor = null }, onCreateTag = { name, callback -> vm.createTag(name, callback) }) }
+    if (adding) QuickTodoAddDialog(state, onClose = { adding = false }, onSave = actions.save)
+    editor?.let { task -> TodoEditor(task, state, onClose = { editor = null }, onSave = { actions.save(it); editor = null }, onDelete = { actions.remove(task); editor = null }, onCreateTag = actions.createTag) }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -156,7 +161,7 @@ private fun TodoRow(item: TodoItem, labels: Map<String, String>, onToggle: () ->
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TodoEditor(item: TodoItem?, state: TodoUiState, onClose: () -> Unit, onSave: (TodoDraft) -> Unit, onDelete: () -> Unit, onCreateTag: (String, (dev.yezi.anniversary.feature.todo.data.TodoTagEntity) -> Unit) -> Unit) {
+private fun TodoEditor(item: TodoItem?, state: TodoUiState, onClose: () -> Unit, onSave: (TodoDraft) -> Unit, onDelete: () -> Unit, onCreateTag: (String, (dev.yezi.anniversary.feature.todo.presentation.TodoTagUi) -> Unit) -> Unit) {
     var title by remember(item?.key) { mutableStateOf(item?.title.orEmpty()) }
     var date by remember(item?.key) { mutableStateOf(item?.date ?: state.date) }
     var noDate by remember(item?.key) { mutableStateOf(item?.date == null && item != null) }

@@ -9,7 +9,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextClearance
-import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.assertTextEquals
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.rule.GrantPermissionRule
 import org.junit.Rule
@@ -28,12 +28,22 @@ class MainActivitySmokeTest {
         compose.onNodeWithText("任务内容").performClick()
         compose.onNodeWithText("任务内容").performTextInput(title)
         compose.onNodeWithText("添加").performClick()
-        compose.waitUntil(5_000) { compose.onNodeWithTag("quick-todo-title").fetchSemanticsNodes().singleOrNull()?.config?.getOrNull(SemanticsProperties.EditableText)?.text?.isEmpty() == true }
+        compose.waitUntil(5_000) {
+            runCatching {
+                compose.onNodeWithTag("quick-todo-title").assertTextEquals("")
+                true
+            }.getOrDefault(false)
+        }
         val secondTitle = "$title-repeat"
         compose.onNodeWithTag("quick-todo-title").performTextInput(secondTitle)
         compose.onNodeWithText("添加").performClick()
         compose.onNodeWithText("关闭").performClick()
-        compose.waitUntil(5_000) { compose.onAllNodes(androidx.compose.ui.test.hasText(title)).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(5_000) {
+            runCatching {
+                compose.onNodeWithText(title).assertExists()
+                true
+            }.getOrDefault(false)
+        }
         compose.onNodeWithText(secondTitle).assertIsDisplayed()
         compose.onNodeWithText(title).performClick()
         compose.onNodeWithText(title).performTextClearance()
