@@ -75,7 +75,7 @@ fun TodoScreen(state: TodoUiState, actions: TodoActions, initialDialog: TodoPrev
             FilterChip(selected = !state.all, onClick = { actions.setAll(false) }, label = { Text("按日期") })
             Spacer(Modifier.width(8.dp)); FilterChip(selected = state.all, onClick = { actions.setAll(true) }, label = { Text("全部") })
             Spacer(Modifier.weight(1f))
-            TextButton(onClick = vm::toggleCompleted) { Text("已完成 ${completed.size} ${if (state.completedOpen) "⌃" else "⌄"}") }
+            TextButton(onClick = actions.toggleCompleted) { Text("已完成 ${completed.size} ${if (state.completedOpen) "⌃" else "⌄"}") }
         }
         if (!state.all) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
@@ -114,7 +114,7 @@ fun TodoScreen(state: TodoUiState, actions: TodoActions, initialDialog: TodoPrev
     ExtendedFloatingActionButton(onClick = { adding = true }, modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).semantics { contentDescription = "快速新增待办" }, icon = { Icon(Icons.Default.Add, null) }, text = { Text("记一件事") }, containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary)
     }
     if (adding) QuickTodoAddDialog(state, onClose = { adding = false }, onSave = actions.save)
-    editor?.let { task -> TodoEditor(task, state, onClose = { editor = null }, onSave = { actions.save(it); editor = null }, onDelete = { actions.remove(task); editor = null }, onCreateTag = actions.createTag) }
+    editor?.let { task -> TodoEditor(task, state, onClose = { editor = null }, onSave = { draft -> actions.save(draft) { editor = null } }, onDelete = { actions.remove(task); editor = null }, onCreateTag = actions.createTag) }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
