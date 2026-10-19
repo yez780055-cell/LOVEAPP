@@ -1,0 +1,216 @@
+package dev.yezi.anniversary.feature.todo.domain
+
+import dev.yezi.anniversary.feature.todo.data.TodoDao
+import dev.yezi.anniversary.feature.todo.data.TodoOccurrenceEntity
+import dev.yezi.anniversary.feature.todo.data.TodoTagEntity
+import dev.yezi.anniversary.feature.todo.data.TodoTaskEntity
+import dev.yezi.anniversary.feature.todo.data.TodoReminderSchedule
+import dev.yezi.anniversary.core.database.ReminderDao
+import dev.yezi.anniversary.core.notification.ReminderScheduler
+import dev.yezi.anniversary.core.notification.ReminderScheduleSpec
+import android.content.Context
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
+import java.time.LocalDate
+import java.time.temporal.ChronoUnit
+import java.util.UUID
+import org.json.JSONArray
+import org.json.JSONObject
+
+data class RepeatRule(val frequency: String, val interval: Int = 1, val startsOn: String, val endsOn: String? = null, val weekdays: List<Int> = emptyList())
+data class TodoItem(val key: String, val id: String, val periodDate: String?, val title: String, val note: String, val date: String?, val time: String?, val tags: List<String>, val completedAt: Long?, val createdAt: Long, val recurrence: RepeatRule?, val reminderEnabled: Boolean, val reminderMinutes: Int)
+data class TodoDraft(val title: String, val date: String?, val time: String?, val note: String, val tags: List<String>, val recurrence: RepeatRule? = null, val reminderEnabled: Boolean = false, val reminderMinutes: Int = 10, val id: String? = null, val periodDate: String? = null, val effectiveFrom: String? = null)
+
+interface TodoRepository {
+    fun observeTasks(): Flow<List<TodoTaskEntity>>
+    fun observeTags(): Flow<List<TodoTagEntity>>
+    suspend fun save(draft: TodoDraft)
+    suspend fun remove(item: TodoItem)
+    suspend fun complete(item: TodoItem, done: Boolean)
+    suspend fun createTag(name: String): TodoTagEntity
+    suspend fun instances(date: String, all: Boolean): List<TodoItem>
+}
+
+class RoomTodoRepository(private val dao: TodoDao, private val reminderDao: ReminderDao, private val context: Context) : TodoRepository {
+    override fun observeTasks() = dao.observeTasks()
+    override fun observeTags() = dao.observeTags()
+
+    override suspend fun save(draft: TodoDraft) {
+        require(draft.title.isNotBlank()) { "请先填写任务标题。" }
+        require(draft.time == null || draft.date != null) { "具体时间需要先选择日期。" }
+        require(!draft.reminderEnabled || (draft.date != null && draft.time != null)) { "提醒需要同时设置日期和具体时间。" }
+        require(draft.recurrence == null || draft.date != null) { "重复任务需要设置开始日期。" }
+        val old = draft.id?.let { dao.task(it) }
+        val history = old?.let(::parseHistory).orEmpty().toMutableList()
+        var rule = draft.recurrence
+        val oldRule = decodeRule(old?.recurrenceJson)
+        if (draft.effectiveFrom != null && oldRule != null && oldRule != rule) {
+            val effective = LocalDate.parse(draft.effectiveFrom)
+            val clippedEnd = effective.minusDays(1)
+            if (LocalDate.parse(oldRule.startsOn) <= clippedEnd && (oldRule.endsOn == null || LocalDate.parse(oldRule.endsOn) >= LocalDate.parse(oldRule.startsOn))) {
+                val oldEnd = oldRule.endsOn?.let { minOf(LocalDate.parse(it), clippedEnd) } ?: clippedEnd
+                if (LocalDate.parse(oldRule.startsOn) <= oldEnd) history += oldRule.copy(endsOn = oldEnd.toString())
+            }
+            rule = rule?.copy(startsOn = maxOf(LocalDate.parse(rule.startsOn), effective).toString())
+        }
+        val historyJson = JSONArray().apply { history.forEach { put(JSONObject(encodeRule(it))) } }.toString()
+        val id = old?.id ?: UUID.randomUUID().toString()
+        val now = System.currentTimeMillis()
+        if (draft.periodDate == null) {
+            val saved = TodoTaskEntity(id, draft.title.trim(), draft.date, old?.isComplete ?: false, "personal", draft.note.trim(), draft.time, JSONArray(draft.tags.distinct()).toString(), old?.createdAt ?: now, now, old?.completedAt, rule?.let(::encodeRule), historyJson, if (rule != null || history.isNotEmpty()) old?.seriesId ?: id else null, draft.reminderEnabled, draft.reminderMinutes.coerceIn(0, 1440))
+            dao.putTask(saved)
+            updateReminder(saved)
+        }
+        if (draft.periodDate != null) {
+            val current = dao.occurrence(id, draft.periodDate) ?: TodoOccurrenceEntity(id, draft.periodDate, draft.date ?: draft.periodDate)
+            dao.putOccurrence(current.copy(scheduledDate = draft.date ?: draft.periodDate, titleOverride = draft.title.trim(), noteOverride = draft.note.trim(), timeOverride = draft.time, tagsOverrideJson = JSONArray(draft.tags.distinct()).toString(), reminderEnabledOverride = draft.reminderEnabled, reminderMinutesBeforeOverride = draft.reminderMinutes.coerceIn(0, 1440), skipped = false, updatedAt = now))
+        }
+    }
+
+    override suspend fun remove(item: TodoItem) {
+        if (item.periodDate != null) {
+            val existing = dao.occurrence(item.id, item.periodDate) ?: TodoOccurrenceEntity(item.id, item.periodDate, item.date ?: item.periodDate)
+            dao.putOccurrence(existing.copy(skipped = true, updatedAt = System.currentTimeMillis()))
+        } else {
+            cancelReminder(item.id)
+            dao.deleteTaskAndOccurrences(item.id)
+        }
+    }
+
+    override suspend fun complete(item: TodoItem, done: Boolean) {
+        val now = if (done) System.currentTimeMillis() else null
+        if (item.periodDate != null) {
+            val existing = dao.occurrence(item.id, item.periodDate) ?: TodoOccurrenceEntity(item.id, item.periodDate, item.date ?: item.periodDate)
+            dao.putOccurrence(existing.copy(completedAt = now, updatedAt = System.currentTimeMillis()))
+        } else dao.task(item.id)?.let { task ->
+            val updated = task.copy(isComplete = done, completedAt = now, updatedAt = System.currentTimeMillis())
+            dao.putTask(updated)
+            if (done) cancelReminder(item.id) else updateReminder(updated)
+        }
+    }
+
+    override suspend fun createTag(name: String): TodoTagEntity {
+        val clean = name.trim().replace(Regex("\\s+"), " ")
+        require(clean.isNotEmpty()) { "标签名称不能为空。" }
+        val normalized = clean.lowercase()
+        dao.tagByNormalizedName(normalized)?.let { return it }
+        val tag = TodoTagEntity(UUID.randomUUID().toString(), clean, normalized)
+        dao.insertTag(tag)
+        return dao.tagByNormalizedName(normalized) ?: tag
+    }
+
+    override suspend fun instances(date: String, all: Boolean): List<TodoItem> {
+        val tasks = dao.observeTasks().first()
+        val records = dao.occurrences()
+        val from = LocalDate.parse(date)
+        val result = mutableListOf<TodoItem>()
+        for (task in tasks) {
+            val rules = parseRules(task)
+            val taskOccurrences = records.filter { it.taskId == task.id }
+            if (rules.isEmpty()) {
+                if (all || task.dueDate == date) result += item(task, null, null)
+                continue
+            }
+            if (all) {
+                for (occ in taskOccurrences) if (!occ.skipped && rules.any { occurs(it, occ.periodDate) }) result += item(task, occ.periodDate, occ)
+                decodeRule(task.recurrenceJson)?.let { rule ->
+                    var candidate = nextOccurrenceDate(rule, date)
+                    while (candidate != null && taskOccurrences.any { it.periodDate == candidate }) candidate = nextOccurrenceDate(rule, LocalDate.parse(candidate).plusDays(1).toString())
+                    candidate?.let { result += item(task, it, null) }
+                }
+            } else {
+                val occurrence = taskOccurrences.firstOrNull { it.periodDate == date }
+                if (rules.any { occurs(it, date) } && occurrence?.skipped != true) result += item(task, date, occurrence)
+                taskOccurrences.filter { it.scheduledDate == date && it.periodDate != date && !it.skipped }.forEach { result += item(task, it.periodDate, it) }
+            }
+            if (task.recurrenceJson == null && task.dueDate != null && (all || task.dueDate == date)) result += item(task, null, null)
+        }
+        val unique = result.distinctBy { it.key }
+        return if (all) unique.sortedWith(compareBy<TodoItem> { it.date ?: "" }.thenBy { it.createdAt })
+        else unique.sortedWith(compareBy<TodoItem> { it.date ?: "" }.thenBy { it.time ?: "" }.thenBy { it.createdAt })
+    }
+
+    private fun item(task: TodoTaskEntity, period: String?, occurrence: TodoOccurrenceEntity?): TodoItem = TodoItem(
+        occurrence?.let { "${task.id}:${it.periodDate}" } ?: task.id, task.id, period,
+        occurrence?.titleOverride ?: task.title, occurrence?.noteOverride ?: task.note,
+        occurrence?.scheduledDate ?: task.dueDate, occurrence?.timeOverride ?: task.scheduledTime,
+        parseStrings(occurrence?.tagsOverrideJson ?: task.tagsJson), occurrence?.completedAt ?: if (period == null) task.completedAt else null,
+        task.createdAt, decodeRule(task.recurrenceJson), occurrence?.reminderEnabledOverride ?: task.reminderEnabled, occurrence?.reminderMinutesBeforeOverride ?: task.reminderMinutesBefore
+    )
+    private suspend fun updateReminder(task: TodoTaskEntity) {
+        val old = reminderDao.getForSource(TodoReminderSchedule.SOURCE_TYPE, task.id)
+        old.forEach { ReminderScheduler.cancel(context, it) }
+        val spec = TodoReminderSchedule.resolve(task)
+        if (spec.reminder.enabled && spec.triggerAtEpochMillis != null) {
+            reminderDao.upsert(spec.reminder)
+            ReminderScheduler.schedule(context, spec)
+        } else reminderDao.deleteForSource(TodoReminderSchedule.SOURCE_TYPE, task.id)
+    }
+    private suspend fun cancelReminder(id: String) {
+        reminderDao.getForSource(TodoReminderSchedule.SOURCE_TYPE, id).forEach { ReminderScheduler.cancel(context, it) }
+        reminderDao.deleteForSource(TodoReminderSchedule.SOURCE_TYPE, id)
+    }
+    private fun parseHistory(task: TodoTaskEntity): List<RepeatRule> = runCatching { JSONArray(task.recurrenceHistoryJson).let { arr -> (0 until arr.length()).mapNotNull { decodeRule(arr.optJSONObject(it)?.toString()) } } }.getOrDefault(emptyList())
+    private fun parseRules(task: TodoTaskEntity): List<RepeatRule> = buildList {
+        addAll(parseHistory(task))
+        decodeRule(task.recurrenceJson)?.let(::add)
+    }
+    private fun parseStrings(raw: String?): List<String> = runCatching { JSONArray(raw ?: "[]").let { a -> (0 until a.length()).map { a.getString(it) } } }.getOrDefault(emptyList())
+    private fun encodeRule(rule: RepeatRule) = JSONObject().put("frequency", rule.frequency).put("interval", rule.interval).put("startsOn", rule.startsOn).put("endsOn", rule.endsOn).put("weekdays", JSONArray(rule.weekdays)).toString()
+    private fun decodeRule(raw: String?): RepeatRule? = runCatching { raw?.let { JSONObject(it).let { o -> RepeatRule(o.getString("frequency"), o.optInt("interval", 1), o.getString("startsOn"), o.optString("endsOn").takeIf(String::isNotBlank), o.optJSONArray("weekdays")?.let { a -> (0 until a.length()).map(a::getInt) } ?: emptyList()) } } }.getOrNull()
+    private fun occurs(rule: RepeatRule, key: String): Boolean = runCatching {
+        val d = LocalDate.parse(key); val start = LocalDate.parse(rule.startsOn)
+        if (d < start || rule.endsOn?.let { d > LocalDate.parse(it) } == true) return@runCatching false
+        when (rule.frequency) {
+            "daily" -> ChronoUnit.DAYS.between(start, d) % rule.interval.coerceAtLeast(1) == 0L
+            "weekly" -> ChronoUnit.WEEKS.between(start.with(java.time.DayOfWeek.MONDAY), d.with(java.time.DayOfWeek.MONDAY)) % rule.interval.coerceAtLeast(1) == 0L && (d.dayOfWeek.value % 7) in rule.weekdays
+            "monthly" -> ChronoUnit.MONTHS.between(start.withDayOfMonth(1), d.withDayOfMonth(1)) % rule.interval.coerceAtLeast(1) == 0L && d.dayOfMonth == start.dayOfMonth
+            else -> false
+        }
+    }.getOrDefault(false)
+
+    private fun nextOccurrenceDate(rule: RepeatRule, fromDate: String): String? = runCatching {
+        require(rule.interval >= 1)
+        val start = LocalDate.parse(rule.startsOn)
+        val first = maxOf(LocalDate.parse(fromDate), start)
+        val end = rule.endsOn?.let(LocalDate::parse)
+        if (end != null && first > end) return@runCatching null
+        when (rule.frequency) {
+            "daily" -> {
+                val elapsed = ChronoUnit.DAYS.between(start, first).coerceAtLeast(0)
+                val steps = (elapsed + rule.interval - 1) / rule.interval
+                start.plusDays(steps * rule.interval).takeIf { it >= first && (end == null || it <= end) }?.toString()
+            }
+            "weekly" -> {
+                val weekdays = rule.weekdays.distinct().filter { it in 0..6 }.sortedBy { (it + 6) % 7 }
+                if (weekdays.isEmpty()) return@runCatching null
+                val startWeek = start.with(java.time.DayOfWeek.MONDAY)
+                val weeks = ChronoUnit.WEEKS.between(startWeek, first.with(java.time.DayOfWeek.MONDAY)).coerceAtLeast(0)
+                var intervalWeek = ((weeks + rule.interval - 1) / rule.interval) * rule.interval
+                while (true) {
+                    val weekStart = startWeek.plusWeeks(intervalWeek)
+                    if (end != null && weekStart > end) return@runCatching null
+                    for (weekday in weekdays) {
+                        val candidate = weekStart.plusDays(((weekday + 6) % 7).toLong())
+                        if (candidate >= first && candidate >= start && (end == null || candidate <= end)) return@runCatching candidate.toString()
+                    }
+                    intervalWeek += rule.interval
+                }
+                null
+            }
+            "monthly" -> {
+                val monthDistance = ChronoUnit.MONTHS.between(start.withDayOfMonth(1), first.withDayOfMonth(1)).coerceAtLeast(0)
+                var intervalMonth = ((monthDistance + rule.interval - 1) / rule.interval) * rule.interval
+                while (true) {
+                    val targetMonth = start.withDayOfMonth(1).plusMonths(intervalMonth)
+                    if (end != null && targetMonth > end) return@runCatching null
+                    val candidate = runCatching { targetMonth.withDayOfMonth(start.dayOfMonth) }.getOrNull()
+                    if (candidate != null && candidate >= first && (end == null || candidate <= end)) return@runCatching candidate.toString()
+                    intervalMonth += rule.interval
+                }
+                null
+            }
+            else -> null
+        }
+    }.getOrNull()
+}
