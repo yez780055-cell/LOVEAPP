@@ -19,7 +19,7 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [35], qualifiers = "w393dp-h852dp")
 class TodoScreenshotTest {
     private fun capture(name: String, state: TodoUiState, dialog: TodoPreviewDialog? = null, previewItem: dev.yezi.anniversary.feature.todo.domain.TodoItem? = null) {
-        val directory = File(System.getProperty("loveapp.screenshots.dir", "build/ui-screenshots"))
+        val directory = File(System.getProperty("loveapp.screenshots.dir") ?: "build/ui-screenshots")
         directory.mkdirs()
         captureRoboImage(File(directory, name).absolutePath) {
             LifeSpaceTheme {
