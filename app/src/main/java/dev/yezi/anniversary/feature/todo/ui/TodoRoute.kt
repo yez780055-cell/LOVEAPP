@@ -97,8 +97,31 @@ fun TodoScreen(state: TodoUiState, vm: TodoViewModel) {
         }
         undoItem?.let { item -> Snackbar(Modifier.fillMaxWidth().padding(bottom = 12.dp), action = { TextButton(onClick = { vm.setCompleted(item, false); undoItem = null }) { Text("撤销") } }) { Text("已完成") } }
     }
-    if (adding) TodoEditor(null, state, onClose = { adding = false }, onSave = { vm.save(it); adding = false }, onDelete = {}, onCreateTag = { name, callback -> vm.createTag(name, callback) })
+    if (adding) QuickTodoAddDialog(state, onClose = { adding = false }, onSave = { vm.save(it); adding = false })
     editor?.let { task -> TodoEditor(task, state, onClose = { editor = null }, onSave = { vm.save(it); editor = null }, onDelete = { vm.remove(task); editor = null }, onCreateTag = { name, callback -> vm.createTag(name, callback) }) }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun QuickTodoAddDialog(state: TodoUiState, onClose: () -> Unit, onSave: (TodoDraft) -> Unit) {
+    var title by remember { mutableStateOf("") }
+    var date by remember { mutableStateOf(if (state.all) LocalDate.now().toString() else state.date) }
+    var noDate by remember { mutableStateOf(false) }
+    var showDate by remember { mutableStateOf(false) }
+    val picker = rememberDatePickerState(initialSelectedDateMillis = runCatching { LocalDate.parse(date).toEpochDay() * 86_400_000 }.getOrDefault(System.currentTimeMillis()))
+    AlertDialog(onDismissRequest = onClose,
+        title = { Text("快速添加") },
+        text = { Column {
+            OutlinedTextField(title, { title = it.take(500) }, Modifier.fillMaxWidth(), label = { Text("任务内容") }, singleLine = true)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = { showDate = true }, modifier = Modifier.weight(1f)) { Text(if (noDate) "选择日期" else prettyDate(date)) }
+                TextButton(onClick = { noDate = !noDate }) { Text(if (noDate) "恢复日期" else "不设日期") }
+            }
+        } },
+        confirmButton = { TextButton(onClick = { if (title.isNotBlank()) onSave(TodoDraft(title, if (noDate) null else date, null, "", emptyList())) }, enabled = title.isNotBlank()) { Text("添加") } },
+        dismissButton = { TextButton(onClick = onClose) { Text("关闭") } }
+    )
+    if (showDate) DatePickerDialog(onDismissRequest = { showDate = false }, confirmButton = { TextButton(onClick = { picker.selectedDateMillis?.let { date = LocalDate.ofEpochDay(it / 86_400_000).toString(); noDate = false }; showDate = false }) { Text("确定") } }, dismissButton = { TextButton(onClick = { showDate = false }) { Text("取消") } }) { DatePicker(picker) }
 }
 
 @Composable
