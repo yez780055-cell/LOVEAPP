@@ -13,13 +13,15 @@ class SystemChangeReceiver : BroadcastReceiver() {
         val pending = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val dao = AppDatabase.get(context).eventDao()
-                dao.getEnabledReminders().forEach { reminder ->
-                    val event = dao.getEvent(reminder.eventId) ?: return@forEach
-                    ReminderScheduler.schedule(context, event, reminder)
+                AppDatabase.get(context).reminderDao().getEnabledReminders().forEach { reminder ->
+                    ReminderScheduler.schedule(
+                        context,
+                        ReminderScheduleSpec(reminder, reminder.nextTriggerAt)
+                    )
                 }
-                dev.yezi.anniversary.core.widget.SingleEventWidgetReceiver.refresh(context)
-            } finally { pending.finish() }
+            } finally {
+                pending.finish()
+            }
         }
     }
 }

@@ -1,66 +1,52 @@
 package dev.yezi.anniversary.core.notification
 
-import android.Manifest
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.os.Build
-import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.ContextCompat
-import dev.yezi.anniversary.app.MainActivity
-import dev.yezi.anniversary.R
 import dev.yezi.anniversary.core.database.AppDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
+/**
+ * Bridges alarms scheduled by the pre-v3 explicit receiver to the new source-based delivery action.
+ * Remove after existing installations have had a release cycle to migrate their scheduled alarms.
+ */
 class ReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        val eventId = intent.getStringExtra(ReminderScheduler.EXTRA_EVENT_ID) ?: return
+        val legacySourceId = intent.getStringExtra(EXTRA_LEGACY_EVENT_ID) ?: return
+        val reminderId = intent.getStringExtra(ReminderScheduler.EXTRA_REMINDER_ID) ?: return
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val dao = AppDatabase.get(context).eventDao()
-                val event = dao.getEvent(eventId) ?: return@launch
-                val reminderId = intent.getStringExtra(ReminderScheduler.EXTRA_REMINDER_ID)
-                val reminder = dao.getRemindersForEvent(eventId).firstOrNull { it.id == reminderId } ?: return@launch
-                createChannel(context)
-                val notificationsAllowed = Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
-                if (notificationsAllowed) {
-                    val open = Intent(context, MainActivity::class.java).putExtra("open_event_id", event.id)
-                    val contentIntent = PendingIntent.getActivity(context, event.id.hashCode(), open, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-                    val notification = NotificationCompat.Builder(context, "anniversary_reminders")
-                        .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-                        .setContentTitle(event.title)
-                        .setContentText("今天是重要的日子")
-                        .setContentIntent(contentIntent)
-                        .setAutoCancel(true)
-                        .build()
-                    NotificationManagerCompat.from(context).notify(event.id.hashCode(), notification)
+                val reminder = AppDatabase.get(context).reminderDao().getById(reminderId) ?: return@launch
+                if (reminder.sourceId != legacySourceId || !reminder.enabled) return@launch
+
+                val legacyPending = Intent(context, ReminderReceiver::class.java)
+                val oldAlarm = android.app.PendingIntent.getBroadcast(
+                    context,
+                    reminder.requestCode,
+                    legacyPending,
+                    android.app.PendingIntent.FLAG_NO_CREATE or android.app.PendingIntent.FLAG_IMMUTABLE
+                )
+                oldAlarm?.let {
+                    context.getSystemService(android.app.AlarmManager::class.java).cancel(it)
+                    it.cancel()
                 }
-                if (event.repeatType == "yearly") {
-                    val tomorrow = java.time.LocalDate.now(java.time.ZoneId.of(event.timezone)).plusDays(1)
-                    val next = dev.yezi.anniversary.core.date.DateEngine.nextOccurrence(java.time.LocalDate.parse(event.targetDate), tomorrow, dev.yezi.anniversary.core.date.RepeatType.YEARLY)
-                    val nextAt = next?.minusDays(reminder.offsetDays.toLong())?.atTime(java.time.LocalTime.parse(reminder.localTime))?.atZone(java.time.ZoneId.of(event.timezone))?.toInstant()?.toEpochMilli()
-                    dao.upsertReminder(reminder.copy(nextTriggerAt = nextAt))
-                    nextAt?.let { ReminderScheduler.schedule(context, event, reminder.copy(nextTriggerAt = it)) }
-                } else {
-                    ReminderScheduler.cancel(context, reminder)
-                    dao.upsertReminder(reminder.copy(enabled = false, nextTriggerAt = null))
-                }
-            } finally { pendingResult.finish() }
+
+                val delivery = Intent(reminder.deliveryAction)
+                    .setPackage(context.packageName)
+                    .putExtra(ReminderScheduler.EXTRA_SOURCE_TYPE, reminder.sourceType)
+                    .putExtra(ReminderScheduler.EXTRA_SOURCE_ID, reminder.sourceId)
+                    .putExtra(ReminderScheduler.EXTRA_REMINDER_ID, reminder.id)
+                context.sendBroadcast(delivery)
+            } finally {
+                pendingResult.finish()
+            }
         }
     }
 
-    private fun createChannel(context: Context) {
-        if (Build.VERSION.SDK_INT >= 26) {
-            val channel = NotificationChannel("anniversary_reminders", "纪念日提醒", NotificationManager.IMPORTANCE_DEFAULT)
-            context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
-        }
+    private companion object {
+        const val EXTRA_LEGACY_EVENT_ID = "event_id"
     }
 }

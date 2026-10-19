@@ -4,15 +4,18 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
-import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
-@RunWith(AndroidJUnit4::class)
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [35])
 class AppDatabaseMigrationTest {
-    @Test fun v1AnniversaryDataSurvivesV2FeatureSchemaMigration() {
+    @Test fun v1AnniversaryDataSurvivesMigrationToSharedV3Schema() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val name = "migration-" + System.nanoTime() + ".db"
         context.deleteDatabase(name)
@@ -34,23 +37,37 @@ class AppDatabaseMigrationTest {
             legacy.execSQL("INSERT INTO events (id,title,targetDate,createdAt,updatedAt,countingMode,includeDueDate,repeatType,repeatInterval,calendarType,timezone,note,isPinned,sortOrder) VALUES ('event-1','test','2026-10-19',1,1,'countDown',0,'none',1,'solar','Asia/Shanghai','',0,0)")
             legacy.execSQL("INSERT INTO reminders (id,eventId,enabled,triggerType,offsetDays,localTime,exact,nextTriggerAt,notificationChannel,requestCode) VALUES ('reminder-1','event-1',1,'on_day',0,'09:00',1,NULL,'anniversary_reminders',11)")
             legacy.version = 1
-        } finally { legacy.close() }
+        } finally {
+            legacy.close()
+        }
 
-        val database = Room.databaseBuilder(context, AppDatabase::class.java, name).addMigrations(MIGRATION_1_2).build()
+        val database = Room.databaseBuilder(context, AppDatabase::class.java, name)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+            .build()
         try {
             val migrated = database.openHelper.writableDatabase
-            val reminder = migrated.query("SELECT sourceType, sourceId FROM reminders WHERE id = 'reminder-1'")
-            reminder.use {
+            val reminderCursor = migrated.query("SELECT sourceType, sourceId, deliveryAction FROM reminders WHERE id = 'reminder-1'")
+            reminderCursor.use {
                 assertTrue(it.moveToFirst())
                 assertEquals("anniversary", it.getString(0))
                 assertEquals("event-1", it.getString(1))
+                assertEquals("dev.yezi.anniversary.action.ANNIVERSARY_REMINDER", it.getString(2))
             }
+
+            val columns = migrated.query("PRAGMA table_info(reminders)")
+            val reminderColumns = mutableSetOf<String>()
+            columns.use { while (it.moveToNext()) reminderColumns += it.getString(1) }
+            assertFalse("eventId" in reminderColumns)
+            assertTrue("sourceType" in reminderColumns)
+            assertTrue("sourceId" in reminderColumns)
+
             val tables = migrated.query("SELECT name FROM sqlite_master WHERE type = 'table'")
             val names = mutableSetOf<String>()
             tables.use { while (it.moveToNext()) names += it.getString(0) }
             assertTrue("todo_tasks" in names)
             assertTrue("period_records" in names)
             assertTrue("period_settings" in names)
+
             val events = migrated.query("SELECT title FROM events WHERE id = 'event-1'")
             events.use { assertTrue(it.moveToFirst()); assertEquals("test", it.getString(0)) }
         } finally {

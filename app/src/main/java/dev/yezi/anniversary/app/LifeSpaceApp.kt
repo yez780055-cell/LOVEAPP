@@ -9,7 +9,13 @@ import dev.yezi.anniversary.feature.todo.presentation.TodoViewModel
 
 class LifeSpaceApp : Application() {
     val database by lazy { AppDatabase.get(this) }
-    val anniversaryRepository by lazy { EventRepository(database.eventDao(), applicationContext) }
+    val anniversaryRepository by lazy {
+        EventRepository(
+            database.eventDao(),
+            database.reminderDao(),
+            applicationContext
+        )
+    }
     val anniversaryViewModelFactory by lazy { EventViewModel.factory(anniversaryRepository) }
     val todoViewModelFactory by lazy { TodoViewModel.factory() }
     val periodViewModelFactory by lazy { PeriodViewModel.factory() }
