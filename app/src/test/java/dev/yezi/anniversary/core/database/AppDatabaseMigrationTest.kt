@@ -15,7 +15,7 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class AppDatabaseMigrationTest {
-    @Test fun v1AnniversaryDataSurvivesMigrationToSharedV3Schema() {
+    @Test fun v1AnniversaryAndTodoDataSurviveMigrationToV4Schema() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val name = "migration-" + System.nanoTime() + ".db"
         context.deleteDatabase(name)

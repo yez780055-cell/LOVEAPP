@@ -143,7 +143,7 @@ private fun TodoEditor(item: TodoItem?, state: TodoUiState, onClose: () -> Unit,
             Column(Modifier.padding(20.dp).heightIn(max = 680.dp)) {
                 Text(if (item == null) "新增待办" else "编辑待办", style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.height(12.dp))
-                OutlinedTextField(title, { title = it }, Modifier.fillMaxWidth(), label = { Text("任务内容") }, singleLine = true)
+                OutlinedTextField(title, { title = it.take(500) }, Modifier.fillMaxWidth(), label = { Text("任务内容") }, singleLine = true)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = { showDatePicker = true }, modifier = Modifier.weight(1f)) { Text(if (noDate) "选择日期" else prettyDate(date)) }
                     TextButton(onClick = { noDate = !noDate; if (noDate) { time = ""; reminder = false } }) { Text(if (noDate) "恢复日期" else "不设日期") }
@@ -160,10 +160,10 @@ private fun TodoEditor(item: TodoItem?, state: TodoUiState, onClose: () -> Unit,
                     state.tags.forEach { tag -> FilterChip(selected = tag.id in selectedTags, onClick = { selectedTags = if (tag.id in selectedTags) selectedTags - tag.id else selectedTags + tag.id }, label = { Text(tag.name) }) }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(newTag, { newTag = it }, Modifier.weight(1f), label = { Text("新建标签") }, singleLine = true)
+                    OutlinedTextField(newTag, { newTag = it.take(80) }, Modifier.weight(1f), label = { Text("新建标签") }, singleLine = true)
                     TextButton(onClick = { if (newTag.isNotBlank()) onCreateTag(newTag) { tag -> selectedTags = (selectedTags + tag.id).distinct(); newTag = "" } }) { Text("添加") }
                 }
-                OutlinedTextField(note, { note = it }, Modifier.fillMaxWidth(), label = { Text("备注") }, minLines = 2, maxLines = 4)
+                OutlinedTextField(note, { note = it.take(5000) }, Modifier.fillMaxWidth(), label = { Text("备注") }, minLines = 2, maxLines = 4)
                 if (repeat != "none") Text("重复周期已保留：${when(repeat) { "daily" -> "每天"; "weekly" -> "每周"; "monthly" -> "每月"; else -> "重复" }}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(reminder, { reminder = it }, enabled = !noDate && date.isNotBlank() && time.isNotBlank()); Text("提醒")

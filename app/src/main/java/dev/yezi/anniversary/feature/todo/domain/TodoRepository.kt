@@ -102,12 +102,9 @@ class RoomTodoRepository(private val dao: TodoDao, private val reminderDao: Remi
             if (all) {
                 for (occ in taskOccurrences) if (!occ.skipped && rules.any { occurs(it, occ.periodDate) }) result += item(task, occ.periodDate, occ)
                 decodeRule(task.recurrenceJson)?.let { rule ->
-                    var d = maxOf(from, LocalDate.parse(rule.startsOn)); var guard = 0
-                    while (d < from.plusYears(3) && guard++ < 1100 && rule.endsOn?.let { d <= LocalDate.parse(it) } != false) {
-                        val key = d.toString()
-                        if (occurs(rule, key) && taskOccurrences.none { it.periodDate == key }) { result += item(task, key, null); break }
-                        d = d.plusDays(1)
-                    }
+                    var candidate = nextOccurrenceDate(rule, date)
+                    while (candidate != null && taskOccurrences.any { it.periodDate == candidate }) candidate = nextOccurrenceDate(rule, LocalDate.parse(candidate).plusDays(1).toString())
+                    candidate?.let { result += item(task, it, null) }
                 }
             } else {
                 val occurrence = taskOccurrences.firstOrNull { it.periodDate == date }
@@ -158,4 +155,49 @@ class RoomTodoRepository(private val dao: TodoDao, private val reminderDao: Remi
             else -> false
         }
     }.getOrDefault(false)
+
+    private fun nextOccurrenceDate(rule: RepeatRule, fromDate: String): String? = runCatching {
+        require(rule.interval >= 1)
+        val start = LocalDate.parse(rule.startsOn)
+        val first = maxOf(LocalDate.parse(fromDate), start)
+        val end = rule.endsOn?.let(LocalDate::parse)
+        if (end != null && first > end) return@runCatching null
+        when (rule.frequency) {
+            "daily" -> {
+                val elapsed = ChronoUnit.DAYS.between(start, first).coerceAtLeast(0)
+                val steps = (elapsed + rule.interval - 1) / rule.interval
+                start.plusDays(steps * rule.interval).takeIf { it >= first && (end == null || it <= end) }?.toString()
+            }
+            "weekly" -> {
+                val weekdays = rule.weekdays.distinct().filter { it in 0..6 }.sortedBy { (it + 6) % 7 }
+                if (weekdays.isEmpty()) return@runCatching null
+                val startWeek = start.with(java.time.DayOfWeek.MONDAY)
+                val weeks = ChronoUnit.WEEKS.between(startWeek, first.with(java.time.DayOfWeek.MONDAY)).coerceAtLeast(0)
+                var intervalWeek = ((weeks + rule.interval - 1) / rule.interval) * rule.interval
+                while (true) {
+                    val weekStart = startWeek.plusWeeks(intervalWeek)
+                    if (end != null && weekStart > end) return@runCatching null
+                    for (weekday in weekdays) {
+                        val candidate = weekStart.plusDays(((weekday + 6) % 7).toLong())
+                        if (candidate >= first && candidate >= start && (end == null || candidate <= end)) return@runCatching candidate.toString()
+                    }
+                    intervalWeek += rule.interval
+                }
+                null
+            }
+            "monthly" -> {
+                val monthDistance = ChronoUnit.MONTHS.between(start.withDayOfMonth(1), first.withDayOfMonth(1)).coerceAtLeast(0)
+                var intervalMonth = ((monthDistance + rule.interval - 1) / rule.interval) * rule.interval
+                while (true) {
+                    val targetMonth = start.withDayOfMonth(1).plusMonths(intervalMonth)
+                    if (end != null && targetMonth > end) return@runCatching null
+                    val candidate = runCatching { targetMonth.withDayOfMonth(start.dayOfMonth) }.getOrNull()
+                    if (candidate != null && candidate >= first && (end == null || candidate <= end)) return@runCatching candidate.toString()
+                    intervalMonth += rule.interval
+                }
+                null
+            }
+            else -> null
+        }
+    }.getOrNull()
 }
