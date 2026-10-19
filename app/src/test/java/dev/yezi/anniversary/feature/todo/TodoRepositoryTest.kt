@@ -65,4 +65,19 @@ class TodoRepositoryTest {
         repo.remove(repo.instances("2026-10-26", false).single())
         assertTrue(repo.instances("2026-10-26", false).isEmpty())
     }
+
+    @Test fun changingOrStoppingARepeatRulePreservesEarlierCycles() = runBlocking {
+        repo.save(TodoDraft("拉伸", "2026-10-12", null, "", emptyList(), RepeatRule("daily", 1, "2026-10-12")))
+        val taskId = repo.instances("2026-10-12", false).single().id
+        repo.complete(repo.instances("2026-10-13", false).single(), true)
+        repo.save(TodoDraft("拉伸", "2026-10-15", null, "", emptyList(), RepeatRule("weekly", 1, "2026-10-12", weekdays = listOf(4)), id = taskId, effectiveFrom = "2026-10-15"))
+        assertEquals(listOf("2026-10-12", "2026-10-13", "2026-10-14"), (12..14).map { "2026-10-${it}" }.filter { repo.instances(it, false).any { item -> item.title == "拉伸" } })
+        assertTrue(repo.instances("2026-10-13", false).single().completedAt != null)
+        assertEquals("2026-10-15", repo.instances("2026-10-15", false).single().date)
+
+        repo.save(TodoDraft("拉伸", "2026-10-16", null, "", emptyList(), null, id = taskId, effectiveFrom = "2026-10-16"))
+        assertEquals(1, repo.instances("2026-10-16", false).size)
+        assertTrue(repo.instances("2026-10-17", false).isEmpty())
+        assertEquals(1, repo.instances("2026-10-13", false).size)
+    }
 }

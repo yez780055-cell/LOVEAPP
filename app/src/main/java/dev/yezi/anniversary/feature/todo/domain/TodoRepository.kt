@@ -19,7 +19,7 @@ import org.json.JSONObject
 
 data class RepeatRule(val frequency: String, val interval: Int = 1, val startsOn: String, val endsOn: String? = null, val weekdays: List<Int> = emptyList())
 data class TodoItem(val key: String, val id: String, val periodDate: String?, val title: String, val note: String, val date: String?, val time: String?, val tags: List<String>, val completedAt: Long?, val createdAt: Long, val recurrence: RepeatRule?, val reminderEnabled: Boolean, val reminderMinutes: Int)
-data class TodoDraft(val title: String, val date: String?, val time: String?, val note: String, val tags: List<String>, val recurrence: RepeatRule? = null, val reminderEnabled: Boolean = false, val reminderMinutes: Int = 10, val id: String? = null, val periodDate: String? = null)
+data class TodoDraft(val title: String, val date: String?, val time: String?, val note: String, val tags: List<String>, val recurrence: RepeatRule? = null, val reminderEnabled: Boolean = false, val reminderMinutes: Int = 10, val id: String? = null, val periodDate: String? = null, val effectiveFrom: String? = null)
 
 interface TodoRepository {
     fun observeTasks(): Flow<List<TodoTaskEntity>>
@@ -41,11 +41,23 @@ class RoomTodoRepository(private val dao: TodoDao, private val reminderDao: Remi
         require(!draft.reminderEnabled || (draft.date != null && draft.time != null)) { "提醒需要同时设置日期和具体时间。" }
         require(draft.recurrence == null || draft.date != null) { "重复任务需要设置开始日期。" }
         val old = draft.id?.let { dao.task(it) }
-        val rule = draft.recurrence
+        val history = old?.let(::parseHistory).orEmpty().toMutableList()
+        var rule = draft.recurrence
+        val oldRule = decodeRule(old?.recurrenceJson)
+        if (draft.effectiveFrom != null && oldRule != null && oldRule != rule) {
+            val effective = LocalDate.parse(draft.effectiveFrom)
+            val clippedEnd = effective.minusDays(1)
+            if (LocalDate.parse(oldRule.startsOn) <= clippedEnd && (oldRule.endsOn == null || LocalDate.parse(oldRule.endsOn) >= LocalDate.parse(oldRule.startsOn))) {
+                val oldEnd = oldRule.endsOn?.let { minOf(LocalDate.parse(it), clippedEnd) } ?: clippedEnd
+                if (LocalDate.parse(oldRule.startsOn) <= oldEnd) history += oldRule.copy(endsOn = oldEnd.toString())
+            }
+            rule = rule?.copy(startsOn = maxOf(LocalDate.parse(rule.startsOn), effective).toString())
+        }
+        val historyJson = JSONArray().apply { history.forEach { put(JSONObject(encodeRule(it))) } }.toString()
         val id = old?.id ?: UUID.randomUUID().toString()
         val now = System.currentTimeMillis()
         if (draft.periodDate == null) {
-            val saved = TodoTaskEntity(id, draft.title.trim(), draft.date, old?.isComplete ?: false, "personal", draft.note.trim(), draft.time, JSONArray(draft.tags.distinct()).toString(), old?.createdAt ?: now, now, old?.completedAt, rule?.let(::encodeRule), old?.recurrenceHistoryJson ?: "[]", if (rule != null) old?.seriesId ?: id else old?.seriesId, draft.reminderEnabled, draft.reminderMinutes.coerceIn(0, 1440))
+            val saved = TodoTaskEntity(id, draft.title.trim(), draft.date, old?.isComplete ?: false, "personal", draft.note.trim(), draft.time, JSONArray(draft.tags.distinct()).toString(), old?.createdAt ?: now, now, old?.completedAt, rule?.let(::encodeRule), historyJson, if (rule != null || history.isNotEmpty()) old?.seriesId ?: id else null, draft.reminderEnabled, draft.reminderMinutes.coerceIn(0, 1440))
             dao.putTask(saved)
             updateReminder(saved)
         }
@@ -138,8 +150,9 @@ class RoomTodoRepository(private val dao: TodoDao, private val reminderDao: Remi
         reminderDao.getForSource(TodoReminderSchedule.SOURCE_TYPE, id).forEach { ReminderScheduler.cancel(context, it) }
         reminderDao.deleteForSource(TodoReminderSchedule.SOURCE_TYPE, id)
     }
+    private fun parseHistory(task: TodoTaskEntity): List<RepeatRule> = runCatching { JSONArray(task.recurrenceHistoryJson).let { arr -> (0 until arr.length()).mapNotNull { decodeRule(arr.optJSONObject(it)?.toString()) } } }.getOrDefault(emptyList())
     private fun parseRules(task: TodoTaskEntity): List<RepeatRule> = buildList {
-        runCatching { JSONArray(task.recurrenceHistoryJson) }.getOrNull()?.let { arr -> for (i in 0 until arr.length()) decodeRule(arr.optJSONObject(i)?.toString())?.let(::add) }
+        addAll(parseHistory(task))
         decodeRule(task.recurrenceJson)?.let(::add)
     }
     private fun parseStrings(raw: String?): List<String> = runCatching { JSONArray(raw ?: "[]").let { a -> (0 until a.length()).map { a.getString(it) } } }.getOrDefault(emptyList())
