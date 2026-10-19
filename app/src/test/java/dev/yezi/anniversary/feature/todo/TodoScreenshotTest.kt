@@ -1,6 +1,8 @@
 package dev.yezi.anniversary.feature.todo
 
+import androidx.activity.ComponentActivity
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.core.app.ActivityScenario
 import com.github.takahirom.roborazzi.captureRoboImage
 import dev.yezi.anniversary.core.design.LifeSpaceTheme
 import dev.yezi.anniversary.feature.todo.presentation.TodoUiState
@@ -21,10 +23,15 @@ class TodoScreenshotTest {
     private fun capture(name: String, state: TodoUiState, dialog: TodoPreviewDialog? = null, previewItem: dev.yezi.anniversary.feature.todo.domain.TodoItem? = null) {
         val directory = File(System.getProperty("loveapp.screenshots.dir", "build/ui-screenshots"))
         directory.mkdirs()
-        captureRoboImage(File(directory, name).absolutePath) {
-            LifeSpaceTheme {
-                TodoScreen(state, TodoActions(), initialDialog = dialog, previewItem = previewItem)
+        val scenario = ActivityScenario.launch(ComponentActivity::class.java)
+        try {
+            scenario.captureRoboImage(File(directory, name)) {
+                LifeSpaceTheme {
+                    TodoScreen(state, TodoActions(), initialDialog = dialog, previewItem = previewItem)
+                }
             }
+        } finally {
+            scenario.close()
         }
     }
 
